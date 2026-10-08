@@ -552,6 +552,8 @@ class Media extends Component {
             {inView === MediaType.VIDEO && (
               <DriveVideo
                 isMuted={isMuted}
+                hasAudio={hasAudio}
+                onMuteToggle={this.handleMuteToggle}
                 onAudioStatusChange={this.handleAudioStatusChange}
               />
             )}
@@ -567,14 +569,16 @@ class Media extends Component {
             </div>
           }
         </div>
-        <div className={`${showMapAlways ? 'w-[60%]' : 'w-full'} self-start flex justify-center`}>
-          <TimeDisplay
-            isThin
-            isMuted={isMuted}
-            hasAudio={hasAudio}
-            onMuteToggle={this.handleMuteToggle}
-          />
-        </div>
+        {inView !== MediaType.VIDEO && (
+          <div className="w-full self-start flex justify-center">
+            <TimeDisplay
+              isThin
+              isMuted={isMuted}
+              hasAudio={hasAudio}
+              onMuteToggle={this.handleMuteToggle}
+            />
+          </div>
+        )}
       </div>
     );
   }

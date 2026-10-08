@@ -1,102 +1,55 @@
 /* eslint-disable camelcase */
 import React, { Component } from 'react';
 import { connect } from 'react-redux';
-import { CircularProgress, Typography } from '@material-ui/core';
+import { Typography } from '@material-ui/core';
 import ReactPlayer from 'react-player/file';
 
 import { api } from '../../api/backend';
 
-import Colors from '../../colors';
 import { ErrorOutline } from '../../icons';
+import GlassControls, { CommaLoader } from '../GlassControls';
 import { currentOffset } from '../../timeline';
-import { seek, bufferVideo } from '../../timeline/playback';
+import { onFrame } from '../../timeline/frameClock';
+import store from '../../store';
+import { bufferVideo, pause, seek, videoSync } from '../../timeline/playback';
 import { isIos, isFirefox } from '../../utils/browser.js';
 
-// Leading-edge debounce: run immediately, then ignore calls until `wait` ms after the last one.
-function debounceLeading(func, wait) {
-  let timeout = null;
-  let args;
-  let context;
-  let timestamp;
-
-  function later() {
-    const last = Date.now() - timestamp;
-    if (last < wait && last >= 0) {
-      timeout = setTimeout(later, wait - last);
-    } else {
-      timeout = null;
-    }
-  }
-
-  return function debounced(...nextArgs) {
-    context = this;
-    args = nextArgs;
-    timestamp = Date.now();
-    const callNow = !timeout;
-    if (!timeout) {
-      timeout = setTimeout(later, wait);
-    }
-    if (callNow) {
-      return func.apply(context, args);
-    }
-    return undefined;
-  };
-}
-
 const VideoOverlay = ({ loading, error }) => {
-  let content;
-  if (error) {
-    content = (
-      <>
-        <ErrorOutline className="mb-2" />
-        <Typography>{error}</Typography>
-      </>
-    );
-  } else if (loading) {
-    content = <CircularProgress style={{ color: Colors.white }} thickness={4} size={50} />;
-  } else {
+  if (!error && !loading) {
     return null;
   }
   return (
-    <div className="z-50 absolute h-full w-full bg-[#16181AAA]">
-      <div className="relative text-center top-[calc(50%_-_25px)]">
-        {content}
-      </div>
+    <div className="z-40 absolute inset-0 pointer-events-none flex items-center justify-center bg-[#16181A66] animate-fadein">
+      {error ? (
+        <div className="glass max-w-[80%] rounded-2xl px-5 py-4 text-center">
+          <ErrorOutline className="mb-2" />
+          <Typography>{error}</Typography>
+        </div>
+      ) : <CommaLoader />}
     </div>
   );
 };
 
-const getVideoState = (videoPlayer) => {
-  const currentTime = videoPlayer.getCurrentTime();
-  const { buffered } = videoPlayer.getInternalPlayer();
+// how far the extrapolated timeline may drift from the video before it is corrected
+const DRIFT_MS = 100;
+// HTMLMediaElement.readyState
+const HAVE_METADATA = 1;
+const HAVE_FUTURE_DATA = 3;
 
-  let bufferRemaining = -1;
-  for (let i = 0; i < buffered.length; i++) {
-    const end = buffered.end(i);
-    if (currentTime >= buffered.start(i) && currentTime <= end) {
-      bufferRemaining = end - currentTime;
-      break;
-    }
-  }
-
-  return {
-    bufferRemaining,
-    hasLoaded: bufferRemaining > 0,
-  };
-};
-
-class DriveVideo extends Component {
+export class DriveVideo extends Component {
   constructor(props) {
     super(props);
 
-    this.onVideoBuffering = this.onVideoBuffering.bind(this);
     this.onHlsError = this.onHlsError.bind(this);
     this.onVideoError = this.onVideoError.bind(this);
     this.onVideoResume = this.onVideoResume.bind(this);
-    this.syncVideo = debounceLeading(this.syncVideo.bind(this), 200);
-    this.firstSeek = true;
+    this.tick = this.tick.bind(this);
 
     this.videoPlayer = React.createRef();
+    this.appliedSeekId = null;
+    this.playPending = false;
+    this.nextPlayAt = 0;
+    this.stopTick = null;
 
     this.state = {
       src: null,
@@ -105,44 +58,17 @@ class DriveVideo extends Component {
   }
 
   componentDidMount() {
-    const { playSpeed } = this.props;
-    if (this.videoPlayer.current) {
-      this.videoPlayer.current.playbackRate = playSpeed || 1;
-    }
     this.updateVideoSource({});
-    this.syncVideo();
-    this.videoSyncIntv = setInterval(this.syncVideo, 500);
+    this.stopTick = onFrame(this.tick);
   }
 
   componentDidUpdate(prevProps) {
     this.updateVideoSource(prevProps);
-    this.syncVideo();
   }
 
   componentWillUnmount() {
-    if (this.videoSyncIntv) {
-      clearTimeout(this.videoSyncIntv);
-      this.videoSyncIntv = null;
-    }
-  }
-
-  onVideoBuffering() {
-    const { dispatch, currentRoute } = this.props;
-    const videoPlayer = this.videoPlayer.current;
-    if (!videoPlayer || !currentRoute || !videoPlayer.getDuration()) {
-      dispatch(bufferVideo(true));
-    }
-
-    if (this.firstSeek) {
-      this.firstSeek = false;
-      videoPlayer.seekTo(this.currentVideoTime(), 'seconds');
-    }
-
-    const { hasLoaded } = getVideoState(videoPlayer);
-    const { readyState } = videoPlayer.getInternalPlayer();
-    if (!hasLoaded || readyState < 2) {
-      dispatch(bufferVideo(true));
-    }
+    if (this.stopTick) this.stopTick();
+    this.stopTick = null;
   }
 
   /**
@@ -213,7 +139,7 @@ class DriveVideo extends Component {
   }
 
   updateVideoSource(prevProps) {
-    let { src } = this.state;
+    const { src } = this.state;
     const { currentRoute } = this.props;
     if (!currentRoute) {
       if (src !== '') {
@@ -223,84 +149,93 @@ class DriveVideo extends Component {
     }
 
     if (src === '' || !prevProps.currentRoute || prevProps.currentRoute?.fullname !== currentRoute.fullname) {
-      src = api.video.getQcameraStreamUrl(currentRoute.fullname, currentRoute.share_exp, currentRoute.share_sig);
-      this.setState({ src, videoError: null });
-      this.syncVideo();
+      this.appliedSeekId = null;
+      this.setState({
+        src: api.video.getQcameraStreamUrl(currentRoute.fullname, currentRoute.share_exp, currentRoute.share_sig),
+        videoError: null,
+      });
     }
   }
 
-  syncVideo() {
-    const { dispatch, isBufferingVideo, isMuted } = this.props;
-    const videoPlayer = this.videoPlayer.current;
-    if (!videoPlayer || !videoPlayer.getInternalPlayer() || !videoPlayer.getDuration()) {
+  getVideo() {
+    const player = this.videoPlayer.current;
+    return player ? player.getInternalPlayer() : null;
+  }
+
+  toVideoTime(offset) {
+    const start = this.props.currentRoute?.videoStartOffset || 0;
+    return Math.max(0, (offset - start) / 1000);
+  }
+
+  toRouteOffset(videoTime) {
+    const start = this.props.currentRoute?.videoStartOffset || 0;
+    return (videoTime * 1000) + start;
+  }
+
+  // jump the video to wherever the timeline was seeked to
+  applySeek(video, seekId) {
+    this.appliedSeekId = seekId;
+    let target = this.toVideoTime(currentOffset());
+    if (Number.isFinite(video.duration)) {
+      target = Math.min(target, video.duration);
+    }
+    if (Math.abs(video.currentTime - target) > 0.01) {
+      video.currentTime = target;
+    }
+  }
+
+  // The <video> is the clock: each frame, read its real position and copy it into
+  // the timeline whenever the extrapolated timeline has drifted. User seeks go the
+  // other way, from the timeline into the video, and are told apart by seekId.
+  tick(now) {
+    const { dispatch, currentRoute, loop, isBufferingVideo } = this.props;
+    const video = this.getVideo();
+    if (!currentRoute || !video || !(video.readyState >= HAVE_METADATA)) {
       return;
     }
 
-    let { desiredPlaySpeed: newPlaybackRate } = this.props;
-    const desiredVideoTime = this.currentVideoTime();
-    const curVideoTime = videoPlayer.getCurrentTime();
-    const timeDiff = desiredVideoTime - curVideoTime;
-    
-    if (Math.abs(timeDiff) <= Math.max(0.1, 0.5 * newPlaybackRate)) { // newPlaybackRate = 0 when paused, set minimum 0.1 to prevent seeking when paused
-      if (!isIos()) {
-        newPlaybackRate = Math.max(0, newPlaybackRate + Math.round(timeDiff * 10) / 10);
+    const buffering = Boolean(video.seeking || (video.readyState < HAVE_FUTURE_DATA && !video.ended));
+    if (buffering !== isBufferingVideo && !this.state.videoError) {
+      dispatch(bufferVideo(buffering));
+    }
+
+    // read the store directly: props lag one render behind a dispatch
+    const { seekId } = store.getState();
+    if (seekId !== this.appliedSeekId) {
+      this.applySeek(video, seekId);
+      return;
+    }
+    if (video.seeking) {
+      return;
+    }
+
+    // a video that hit its end pauses itself, and ReactPlayer won't replay it
+    // because its `playing` prop never changed, so restart it when the loop wraps
+    if (video.paused && this.props.desiredPlaySpeed && !video.ended && !this.playPending && now >= this.nextPlayAt) {
+      this.playPending = true;
+      Promise.resolve(video.play())
+        .catch(() => { this.nextPlayAt = performance.now() + 1000; }) // e.g. autoplay blocked: back off
+        .finally(() => { this.playPending = false; });
+    }
+
+    const offset = this.toRouteOffset(video.currentTime);
+    if (loop?.duration) {
+      const loopEnd = loop.startTime + loop.duration;
+      if (video.ended || offset >= loopEnd || offset < loop.startTime - DRIFT_MS) {
+        dispatch(seek(loop.startTime));
+        return;
       }
-    } else if (desiredVideoTime === 0 && timeDiff < 0 && curVideoTime !== videoPlayer.getDuration()) {
-      // logs start earlier than video, so skip to video ts 0
-      dispatch(seek(currentOffset() - (timeDiff * 1000)));
-    } else {
-      videoPlayer.seekTo(desiredVideoTime, 'seconds');
-    }
-    // most browsers don't support more than 16x playback rate, firefox mutes audio above 8x causing audio to cut in and out with timeDiff rate shifts
-    newPlaybackRate = Math.max(0, Math.min((isFirefox() && !isMuted) ? 8 : 16, newPlaybackRate));
-
-    const internalPlayer = videoPlayer.getInternalPlayer();
-
-    const { hasLoaded } = getVideoState(videoPlayer);
-    if (isBufferingVideo && internalPlayer.readyState >= 4) {
-      dispatch(bufferVideo(false));
-    } else if (isBufferingVideo || !hasLoaded || internalPlayer.readyState < 2) {
-      if (!isBufferingVideo) {
-        dispatch(bufferVideo(true));
-      } 
-      newPlaybackRate = 0; // in some circumstances, iOS won't update readyState unless temporarily paused
+    } else if (video.ended && this.props.desiredPlaySpeed) {
+      dispatch(pause());
     }
 
-    if (videoPlayer.getInternalPlayer('hls')) {
-      if (!internalPlayer.paused && newPlaybackRate === 0) {
-        internalPlayer.pause();
-      } else if (internalPlayer.playbackRate !== newPlaybackRate && newPlaybackRate !== 0) {
-        internalPlayer.playbackRate = newPlaybackRate;
-      }
-      if (internalPlayer.paused && newPlaybackRate !== 0) {
-        const playRes = internalPlayer.play();
-        if (playRes) {
-          playRes.catch(() => console.debug('[DriveVideo] play interrupted by pause'));
-        }
-      }
-    } else {
-      // TODO: fix iOS bug where video doesn't stop buffering while paused
-      internalPlayer.playbackRate = newPlaybackRate;
+    if (Math.abs(offset - currentOffset()) > DRIFT_MS) {
+      dispatch(videoSync(offset));
     }
-  }
-
-  currentVideoTime(offset = currentOffset()) {
-    const { currentRoute } = this.props;
-    if (!currentRoute) {
-      return 0;
-    }
-
-    if (currentRoute.videoStartOffset) {
-      offset -= currentRoute.videoStartOffset;
-    }
-
-    offset /= 1000;
-
-    return Math.max(0, offset);
   }
 
   render() {
-    const { desiredPlaySpeed, isBufferingVideo, currentRoute, onAudioStatusChange, isMuted } = this.props;
+    const { desiredPlaySpeed, isBufferingVideo, currentRoute, onAudioStatusChange, isMuted, hasAudio, onMuteToggle } = this.props;
     const { src, videoError } = this.state;
 
     const onPlayerReady = (player) => {
@@ -324,7 +259,7 @@ class DriveVideo extends Component {
     };
 
     return (
-      <div className="min-h-[200px] relative max-w-[964px] m-[0_auto] aspect-[1.593]">
+      <div className="drive-player min-h-[200px] relative max-w-[964px] m-[0_auto] aspect-[1.593] overflow-hidden rounded-2xl bg-black">
         <VideoOverlay loading={isBufferingVideo} error={videoError} />
         <ReactPlayer
           ref={this.videoPlayer}
@@ -341,12 +276,13 @@ class DriveVideo extends Component {
               maxBufferLength: 40,
             },
           }}
-          playbackRate={desiredPlaySpeed}
-          onBuffer={this.onVideoBuffering}
+          // most browsers can't go above 16x; firefox mutes audio above 8x
+          playbackRate={Math.min(desiredPlaySpeed || 1, (isFirefox() && !isMuted) ? 8 : 16)}
           onBufferEnd={this.onVideoResume}
           onPlay={this.onVideoResume}
           onError={this.onVideoError}
         />
+        <GlassControls isMuted={isMuted} hasAudio={hasAudio} onMuteToggle={onMuteToggle} />
       </div>
     );
   }
@@ -355,8 +291,7 @@ class DriveVideo extends Component {
 const stateToProps = (state) => ({
   dongleId: state.dongleId,
   desiredPlaySpeed: state.desiredPlaySpeed,
-  offset: state.offset,
-  startTime: state.startTime,
+  loop: state.loop,
   isBufferingVideo: state.isBufferingVideo,
   routes: state.routes,
   currentRoute: state.currentRoute,

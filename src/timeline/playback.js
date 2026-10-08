@@ -15,6 +15,7 @@ export function reducer(_state, action) {
         ...state,
         offset: action.offset,
         startTime: Date.now(),
+        seekId: (state.seekId || 0) + 1,
       };
 
       if (loopOffset !== null) {
@@ -68,6 +69,15 @@ export function reducer(_state, action) {
         isBufferingVideo: true,
         offset: 0,
         startTime: Date.now(),
+        seekId: (state.seekId || 0) + 1,
+      };
+      break;
+    case Types.ACTION_VIDEO_SYNC:
+      // the video reports where it actually is; unlike a seek this must not move the video
+      state = {
+        ...state,
+        offset: action.offset,
+        startTime: Date.now(),
       };
       break;
     default:
@@ -109,6 +119,14 @@ export function reducer(_state, action) {
 export function seek(offset) {
   return {
     type: Types.ACTION_SEEK,
+    offset,
+  };
+}
+
+// copy the video's real position into the timeline
+export function videoSync(offset) {
+  return {
+    type: Types.ACTION_VIDEO_SYNC,
     offset,
   };
 }

@@ -1,6 +1,6 @@
 import { asyncSleep } from '../utils';
 import { currentOffset } from '.';
-import { bufferVideo, pause, play, reducer, seek, selectLoop } from './playback';
+import { bufferVideo, pause, play, reducer, resetPlayback, seek, selectLoop, videoSync } from './playback';
 
 const makeDefaultStruct = function makeDefaultStruct() {
   return {
@@ -129,5 +129,25 @@ describe('playback', () => {
     expect(state.isBufferingVideo).toEqual(false);
 
     expect(state.desiredPlaySpeed).toEqual(2);
+  });
+
+  it('only bumps seekId for real seeks, not video syncs', () => {
+    newNow();
+    let state = { ...makeDefaultStruct(), seekId: 0 };
+
+    state = reducer(state, seek(5000));
+    expect(state.seekId).toEqual(1);
+    expect(state.offset).toEqual(5000);
+
+    const syncTime = newNow();
+    state = reducer(state, videoSync(5230));
+    expect(state.seekId).toEqual(1);
+    expect(state.offset).toEqual(5230);
+    expect(state.startTime).toEqual(syncTime);
+    expect(currentOffset(state)).toEqual(5230);
+
+    state = reducer(state, resetPlayback());
+    expect(state.seekId).toEqual(2);
+    expect(state.offset).toEqual(0);
   });
 });

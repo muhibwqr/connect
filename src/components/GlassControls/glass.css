@@ -1,0 +1,142 @@
+.glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04));
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.goo {
+  filter: url(#glass-goo);
+}
+
+.glass-dock {
+  transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.glass-dock.is-hidden {
+  opacity: 0;
+  transform: translateY(14px) scale(0.98);
+  pointer-events: none;
+}
+
+.glass-btn {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease;
+}
+
+.glass-btn:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.glass-btn:active {
+  transform: scale(0.88);
+}
+
+.glass-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* play/pause morph: two halves whose clip-paths morph between bars and a triangle */
+.pp-half {
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  transition: clip-path 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pp-left { clip-path: polygon(14% 0%, 40% 0%, 40% 100%, 14% 100%); }
+.pp-right { clip-path: polygon(60% 0%, 86% 0%, 86% 100%, 60% 100%); }
+.is-paused .pp-left { clip-path: polygon(16% 0%, 58% 24%, 58% 76%, 16% 100%); }
+.is-paused .pp-right { clip-path: polygon(58% 24%, 96% 50%, 96% 50%, 58% 76%); }
+
+/* scrubber */
+.scrub-blob {
+  transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.scrub-drop {
+  transition: opacity 0.2s ease, width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.scrub-bubble {
+  transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* speed selector */
+.speed-blob {
+  transition: left 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* lags behind the blob so it stretches into a droplet and snaps back */
+.speed-trail {
+  transition: left 0.7s cubic-bezier(0.65, 0, 0.35, 1) 0.06s;
+}
+
+/* center feedback bloop */
+@keyframes glass-bloop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+}
+
+.glass-bloop {
+  animation: glass-bloop 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes glass-skip {
+  0% { opacity: 0; transform: translateY(-50%) scale(0.6); }
+  25% { opacity: 1; transform: translateY(-50%) scale(1.05); }
+  100% { opacity: 0; transform: translateY(-50%) scale(1.2); }
+}
+
+.glass-skip {
+  animation: glass-skip 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* buffering: blobs orbit and merge under the goo filter */
+.comma-loader { overflow: hidden; }
+.comma-loader::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(from 0deg, transparent 0 65%, rgba(58, 208, 124, 0.9) 88%, #fff 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  animation: comma-ring 1.1s linear infinite;
+}
+.comma-spin {
+  animation: comma-spin 1.1s cubic-bezier(0.6, 0.05, 0.3, 1) infinite;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.35));
+}
+@keyframes comma-spin {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(200deg) scale(0.86); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+@keyframes comma-ring { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-dock, .glass-btn, .pp-half, .scrub-blob, .scrub-drop, .scrub-bubble, .speed-blob, .speed-trail { transition: none; }
+  .glass-bloop, .glass-skip, .comma-spin, .comma-loader::before { animation-duration: 0.01s; animation-iteration-count: 1; }
+}
+
+/* fill the screen when the player is fullscreened; the video letterboxes */
+.drive-player:fullscreen {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+.drive-player:-webkit-full-screen {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
