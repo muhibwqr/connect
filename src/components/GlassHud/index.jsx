@@ -15,7 +15,6 @@ import { STATS, resetHud, setHud, setHudUi, useHud, useHudUi } from './store';
 import './hud.css';
 
 const MARGIN = 12;
-const GAP = 8;
 const SEEK_PICK_PX = 28;
 const EXPAND_MS = 450;
 const BEARING_EASE = 0.15;
@@ -211,8 +210,13 @@ const Minimap = ({ track, hud, box, expanded, editing, onExpand, onSeek, childre
   );
 };
 
+// speed bar is full at ~90 mph
+const TOP_SPEED_MPS = 40;
+const clamp01 = (v) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
+
 const StatsWidget = forwardRef(({ track, route, range, hud, style }, ref) => {
   const valueRefs = useRef({});
+  const fillRefs = useRef({});
   const engagedRowRef = useRef(null);
   const intervals = useMemo(() => engagedIntervals(route?.events), [route?.events]);
   const alerts = useMemo(() => (route?.events || [])
@@ -224,26 +228,29 @@ const StatsWidget = forwardRef(({ track, route, range, hud, style }, ref) => {
     : null;
 
   const live = useRef({});
-  live.current = { track, range, hud, intervals, alerts };
+  live.current = { track, range, hud, intervals, alerts, engagedPct };
 
   useEffect(() => {
     let raf;
-    const set = (key, text) => {
+    const set = (key, text, fill) => {
       const el = valueRefs.current[key];
       if (el && el.textContent !== text) el.textContent = text;
+      const bar = fillRefs.current[key];
+      if (bar) bar.style.transform = `scaleX(${clamp01(fill)})`;
     };
     const tick = () => {
       raf = requestAnimationFrame(tick);
-      const { track: t, range: r, hud: h, intervals: iv, alerts: al } = live.current;
+      const { track: t, range: r, hud: h, intervals: iv, alerts: al, engagedPct: ep } = live.current;
       const offset = currentOffset();
       const s = t && t.ts.length ? sampleTrack(t, offset) : null;
-      set('speed', s ? String(Math.round(s.speed * MPS_TO[h.units])) : '--');
-      set('distance', s ? (s.dist / M_PER[h.units]).toFixed(1) : '--');
-      set('remaining', r ? formatDuration(r.end - offset) : '--');
+      set('speed', s ? String(Math.round(s.speed * MPS_TO[h.units])) : '--', s ? s.speed / TOP_SPEED_MPS : 0);
+      set('distance', s ? (s.dist / M_PER[h.units]).toFixed(1) : '--', s && t.total ? s.dist / t.total : 0);
+      set('remaining', r ? formatDuration(r.end - offset) : '--', r ? (r.end - offset) / (r.end - r.start) : 0);
       const engaged = inIntervals(iv, offset);
-      set('engaged', engaged ? 'On' : 'Off');
+      set('engaged', engaged ? 'On' : 'Off', ep !== null ? ep / 100 : Number(engaged));
       engagedRowRef.current?.classList.toggle('is-on', engaged);
-      set('alerts', String(countUpTo(al, offset)));
+      const seen = countUpTo(al, offset);
+      set('alerts', String(seen), al.length ? seen / al.length : 0);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -252,18 +259,28 @@ const StatsWidget = forwardRef(({ track, route, range, hud, style }, ref) => {
   const units = {
     speed: SPEED_UNIT[hud.units],
     distance: track?.total ? `/ ${(track.total / M_PER[hud.units]).toFixed(1)} ${DIST_UNIT[hud.units]}` : DIST_UNIT[hud.units],
-    remaining: 'left',
-    engaged: engagedPct !== null ? `${engagedPct}% of drive` : 'openpilot',
-    alerts: 'alerts',
+    remaining: '',
+    engaged: engagedPct !== null ? `${engagedPct}%` : '',
+    alerts: alerts.length ? `/ ${alerts.length}` : '',
   };
 
   return (
     <div ref={ref} className="hud-stats" style={style}>
       {STATS.filter((s) => hud.stats[s.key]).map((s) => (
-        <div key={s.key} ref={s.key === 'engaged' ? engagedRowRef : undefined} className="hud-stat">
-          <span className="hud-stat-icon">{STAT_ICONS[s.key]}</span>
-          <span ref={(el) => { valueRefs.current[s.key] = el; }} className="hud-stat-value fn-text">--</span>
-          <span className="hud-stat-unit fn-text">{units[s.key]}</span>
+        <div key={s.key} ref={s.key === 'engaged' ? engagedRowRef : undefined} className={`hud-bar is-${s.key}`}>
+          <span className="hud-bar-icon">{STAT_ICONS[s.key]}</span>
+          <div className="hud-bar-body">
+            <div className="hud-bar-head">
+              <span className="hud-bar-label">{s.label}</span>
+              <span className="hud-bar-reading">
+                <span ref={(el) => { valueRefs.current[s.key] = el; }} className="hud-bar-value fn-text">--</span>
+                {units[s.key] && <span className="hud-bar-unit">{units[s.key]}</span>}
+              </span>
+            </div>
+            <div className="hud-bar-track">
+              <div ref={(el) => { fillRefs.current[s.key] = el; }} className="hud-bar-fill" />
+            </div>
+          </div>
         </div>
       ))}
     </div>
@@ -436,21 +453,9 @@ const GlassHud = ({ dispatch, currentRoute, zoom }) => {
   let statsXY;
   if (hud.statsPos) {
     statsXY = place(hud.statsPos, sw, sh, W, H);
-  } else if (hud.minimap) {
-    // docked under the minimap, Fortnite style; flips above it, or beside it when the video is short
-    const below = mapBox.top + mapPx + GAP;
-    const above = mapBox.top - GAP - sh;
-    const onRight = mapBox.left + mapPx / 2 > W / 2;
-    const maxLeft = Math.max(MARGIN, W - sw - MARGIN);
-    if (below + sh <= H - MARGIN || above >= MARGIN) {
-      const left = clamp(onRight ? mapBox.left + mapPx - sw : mapBox.left, MARGIN, maxLeft);
-      statsXY = { left, top: below + sh <= H - MARGIN ? below : above };
-    } else {
-      const left = clamp(onRight ? mapBox.left - GAP - sw : mapBox.left + mapPx + GAP, MARGIN, maxLeft);
-      statsXY = { left, top: clamp(mapBox.top, MARGIN, Math.max(MARGIN, H - MARGIN - sh)) };
-    }
   } else {
-    statsXY = place({ x: 1, y: 0 }, sw, sh, W, H);
+    // health bars sit top-left, out of the minimap's way
+    statsXY = place({ x: 0, y: 0 }, sw, sh, W, H);
   }
   const statsBox = { ...statsXY, width: sw, height: sh };
 
