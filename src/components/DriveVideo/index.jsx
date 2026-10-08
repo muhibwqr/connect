@@ -190,7 +190,7 @@ class DriveVideo extends Component {
     this.raf = requestAnimationFrame(this.tick);
     const { dispatch, currentRoute, loop, isBufferingVideo } = this.props;
     const video = this.getVideo();
-    if (!currentRoute || !video || !video.readyState || video.readyState < HAVE_METADATA) {
+    if (!currentRoute || !video || !(video.readyState >= HAVE_METADATA)) {
       return;
     }
 
