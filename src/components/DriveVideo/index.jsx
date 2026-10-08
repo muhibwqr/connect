@@ -47,6 +47,7 @@ class DriveVideo extends Component {
 
     this.videoPlayer = React.createRef();
     this.appliedSeekId = null;
+    this.playPending = false;
     this.raf = null;
 
     this.state = {
@@ -206,6 +207,13 @@ class DriveVideo extends Component {
     }
     if (video.seeking) {
       return;
+    }
+
+    // a video that hit its end pauses itself, and ReactPlayer won't replay it
+    // because its `playing` prop never changed, so restart it when the loop wraps
+    if (video.paused && this.props.desiredPlaySpeed && !video.ended && !this.playPending) {
+      this.playPending = true;
+      Promise.resolve(video.play()).catch(() => {}).finally(() => { this.playPending = false; });
     }
 
     const offset = this.toRouteOffset(video.currentTime);
