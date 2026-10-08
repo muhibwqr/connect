@@ -7,7 +7,8 @@ import ReactPlayer from 'react-player/file';
 import { api } from '../../api/backend';
 
 import { ErrorOutline } from '../../icons';
-import GlassControls, { GooLoader } from '../GlassControls';
+import GlassControls, { CommaLoader } from '../GlassControls';
+import GlassHud from '../GlassHud';
 import { currentOffset } from '../../timeline';
 import { seek, bufferVideo } from '../../timeline/playback';
 import { isIos, isFirefox } from '../../utils/browser.js';
@@ -54,7 +55,7 @@ const VideoOverlay = ({ loading, error }) => {
           <ErrorOutline className="mb-2" />
           <Typography>{error}</Typography>
         </div>
-      ) : <GooLoader />}
+      ) : <CommaLoader />}
     </div>
   );
 };
@@ -341,6 +342,7 @@ class DriveVideo extends Component {
           onError={this.onVideoError}
         />
         <GlassControls isMuted={isMuted} hasAudio={hasAudio} onMuteToggle={onMuteToggle} />
+        <GlassHud />
       </div>
     );
   }

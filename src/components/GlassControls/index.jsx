@@ -3,11 +3,12 @@ import { connect } from 'react-redux';
 import dayjs from 'dayjs';
 
 import { api } from '../../api/backend';
-import { Forward10, Pause, PlayArrow, Replay10, VolumeOff, VolumeUp } from '../../icons';
+import { Forward10, Pause, PlayArrow, Replay10, SettingsIcon, VolumeOff, VolumeUp } from '../../icons';
 import { currentOffset } from '../../timeline';
 import { pause, play, seek } from '../../timeline/playback';
 import { getSegmentNumber } from '../../utils';
 import { isIos } from '../../utils/browser.js';
+import { toggleHudPanel } from '../GlassHud/store';
 import './glass.css';
 
 const SPEEDS = [0.5, 1, 2, 4, 8];
@@ -44,14 +45,13 @@ export const GooFilter = () => (
   </svg>
 );
 
-export const GooLoader = () => (
-  <div className="glass relative w-16 h-16 rounded-full" role="progressbar" aria-label="Loading video">
-    <div className="goo absolute inset-0">
-      <div className="goo-loader-core absolute left-1/2 top-1/2 -ml-2.5 -mt-2.5 w-5 h-5 rounded-full bg-white" />
-      <div className="goo-loader-dot absolute left-1/2 top-1/2 -ml-1.5 -mt-1.5 w-3 h-3 rounded-full bg-white" />
-      <div className="goo-loader-dot absolute left-1/2 top-1/2 -ml-1.5 -mt-1.5 w-3 h-3 rounded-full bg-white" />
-      <div className="goo-loader-dot absolute left-1/2 top-1/2 -ml-1.5 -mt-1.5 w-3 h-3 rounded-full bg-white" />
-    </div>
+const COMMA_PATH = 'M48.453 105.707C48.453 103.77 48.3011 102.148 48.5246 100.584C48.6198 99.9171 49.4009 99.203 50.0379 98.8003C53.1435 96.8362 56.5171 95.268 59.4085 93.0154C68.7741 85.7187 74.3255 76.1131 74.6289 63.6354C74.7149 60.0925 73.4079 59.2074 70.4217 60.5875C61.8019 64.572 52.5325 62.2358 47.5855 54.8313C42.1907 46.7555 42.9504 36.0028 49.4143 28.9481C57.6708 19.9376 71.2562 19.6679 80.6245 28.2733C86.2363 33.4281 88.9028 40.084 89.5677 47.6547C91.797 73.0176 79.0313 93.9229 55.797 103.106C53.4975 104.015 51.1395 104.761 48.453 105.707Z';
+
+export const CommaLoader = () => (
+  <div className="glass comma-loader relative w-16 h-16 rounded-full flex items-center justify-center" role="progressbar" aria-label="Loading video">
+    <svg className="comma-spin w-9 h-9" viewBox="20 20 88 88" aria-hidden="true">
+      <path fill="#fff" fillRule="evenodd" d={COMMA_PATH} />
+    </svg>
   </div>
 );
 
@@ -433,6 +433,10 @@ const GlassControls = ({ dispatch, zoom, currentRoute, desiredPlaySpeed, isBuffe
               </GlassButton>
             </>
           )}
+
+          <GlassButton onClick={toggleHudPanel} aria-label="HUD settings">
+            <SettingsIcon className="w-5 h-5" />
+          </GlassButton>
 
           <GlassButton
             onClick={onMuteToggle}

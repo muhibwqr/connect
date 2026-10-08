@@ -10,12 +10,10 @@ import { deviceSupportsClips } from '../../api/clips';
 
 import DriveMap from '../DriveMap';
 import DriveVideo from '../DriveVideo';
-import TimeDisplay from '../TimeDisplay';
 import { subscribeWindowSize } from '../../hooks/window';
 import UploadQueue from '../Files/UploadQueue';
 import ClipMenu from './ClipMenu';
 import SwitchLoading from '../utils/SwitchLoading';
-import { bufferVideo } from '../../timeline/playback';
 import Colors from '../../colors';
 import { ContentCopy, InfoOutline, ShareIcon, WarningIcon } from '../../icons';
 import { deviceIsOnline, deviceOnCellular, getSegmentNumber } from '../../utils';
@@ -193,17 +191,11 @@ const styles = () => ({
   },
 });
 
-const MediaType = {
-  VIDEO: 'video',
-  MAP: 'map',
-};
-
 class Media extends Component {
   constructor(props) {
     super(props);
 
     this.state = {
-      inView: MediaType.VIDEO,
       windowWidth: window.innerWidth,
       downloadMenu: null,
       clipMenu: null,
@@ -253,28 +245,16 @@ class Media extends Component {
   }
 
   componentDidUpdate(prevProps, prevState) {
-    const { windowWidth, inView, downloadMenu, moreInfoMenu, routePreserved } = this.state;
-    const showMapAlways = windowWidth >= 1536;
+    const { downloadMenu, moreInfoMenu, routePreserved } = this.state;
     if (prevProps.dongleId !== this.props.dongleId) {
       this.setState({ clipsSupported: false, clipMenu: null });
       this.checkClipsSupport();
     } else if (!deviceIsOnline(prevProps.device) && deviceIsOnline(this.props.device)) {
       this.checkClipsSupport();
     }
-    if (showMapAlways && inView === MediaType.MAP) {
-      this.setState({ inView: MediaType.VIDEO });
-    }
-
-    if (!showMapAlways && inView === MediaType.MAP && this.props.isBufferingVideo) {
-      this.props.dispatch(bufferVideo(false));
-    }
 
     if (prevProps.currentRoute !== this.props.currentRoute && this.props.currentRoute) {
       this.props.dispatch(fetchEvents(this.props.currentRoute));
-    }
-
-    if (prevState.inView && prevState.inView !== this.state.inView) {
-      this.props.dispatch(analyticsEvent('media_switch_view', { in_view: this.state.inView }));
     }
 
     if (this.props.currentRoute && ((!prevState.downloadMenu && downloadMenu)
@@ -536,77 +516,38 @@ class Media extends Component {
   }
 
   render() {
-    const { inView, windowWidth, isMuted, hasAudio } = this.state;
+    const { isMuted, hasAudio } = this.state;
 
     if (this.props.menusOnly) { // for test
       return this.renderMenus(true);
     }
 
-    const showMapAlways = windowWidth >= 1536;
-
     return (
       <div className="flex flex-col gap-4">
-        {this.renderMediaOptions(showMapAlways)}
-        <div className="flex flex-row gap-5">
-          <div className={showMapAlways ? 'w-[60%]' : 'w-full'}>
-            {inView === MediaType.VIDEO && (
-              <DriveVideo
-                isMuted={isMuted}
-                hasAudio={hasAudio}
-                onMuteToggle={this.handleMuteToggle}
-                onAudioStatusChange={this.handleAudioStatusChange}
-              />
-            )}
-            {(inView === MediaType.MAP && !showMapAlways) && (
-              <div className="w-full">
-                <DriveMap />
-              </div>
-            )}
-          </div>
-          {(inView === MediaType.VIDEO && showMapAlways) &&
-            <div className="w-[40%]">
-              <DriveMap />
-            </div>
-          }
-        </div>
-        {inView !== MediaType.VIDEO && (
-          <div className="w-full self-start flex justify-center">
-            <TimeDisplay
-              isThin
+        {this.renderMediaOptions()}
+        <div className="flex flex-col xl:flex-row gap-4 xl:gap-5">
+          <div className="w-full xl:w-[60%]">
+            <DriveVideo
               isMuted={isMuted}
               hasAudio={hasAudio}
               onMuteToggle={this.handleMuteToggle}
+              onAudioStatusChange={this.handleAudioStatusChange}
             />
           </div>
-        )}
+          <div className="w-full xl:w-[40%] h-[260px] sm:h-[340px] xl:h-auto">
+            <DriveMap />
+          </div>
+        </div>
       </div>
     );
   }
 
-  renderMediaOptions(showMapAlways) {
+  renderMediaOptions() {
     const { classes, device } = this.props;
-    const { inView, clipsSupported } = this.state;
+    const { clipsSupported } = this.state;
     return (
       <>
         <div className="flex flex-wrap">
-          { !showMapAlways && (
-            <div className={classes.mediaOptions}>
-              <div
-                className={classes.mediaOption}
-                style={inView !== MediaType.VIDEO ? { opacity: 0.6 } : {}}
-                onClick={() => this.setState({ inView: MediaType.VIDEO })}
-              >
-                <Typography className={classes.mediaOptionText}>Video</Typography>
-              </div>
-              <div
-                className={classes.mediaOption}
-                style={inView !== MediaType.MAP ? { opacity: 0.6 } : { }}
-                onClick={() => this.setState({ inView: MediaType.MAP })}
-              >
-                <Typography className={classes.mediaOptionText}>Map</Typography>
-              </div>
-            </div>
-          )}
           <div className={`${classes.mediaOptions} ml-auto`}>
             {clipsSupported && <Tooltip title={deviceIsOnline(device) ? '' : 'Device offline'} placement="top">
               <div
