@@ -447,7 +447,7 @@ const GlassHud = ({ dispatch, currentRoute, zoom }) => {
   const mapBox = { ...place(hud.mapPos, mapPx, mapPx, W, H), width: mapPx, height: mapPx };
   const expandedBox = { left: MARGIN, top: MARGIN, width: Math.max(0, W - 2 * MARGIN), height: Math.max(0, H - 2 * MARGIN) };
 
-  const scale = hud.statsScale * (W && W < COMPACT_WIDTH ? 0.8 : 1);
+  const scale = hud.statsScale * (W && W < COMPACT_WIDTH ? 0.66 : 1);
   const sw = statsSize.w * scale;
   const sh = statsSize.h * scale;
   let statsXY;
