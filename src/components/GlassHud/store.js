@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 import { isMetric } from '../../utils/conversions';
 
-const STORAGE_KEY = 'glassHud:v1';
+const STORAGE_KEY = 'glassHud:v2';
 
 export const STATS = [
   { key: 'speed', label: 'Speed' },
@@ -14,7 +14,7 @@ export const STATS = [
 
 const defaults = () => ({
   minimap: true,
-  shape: 'circle',
+  shape: 'square',
   mapSize: 0.36,
   mapZoom: 15,
   rotate: false,

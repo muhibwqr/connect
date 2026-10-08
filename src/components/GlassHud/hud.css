@@ -26,7 +26,7 @@
     border-radius 0.45s ease,
     box-shadow 0.2s ease;
 }
-.hud-minimap:not(.is-expanded) { opacity: 0.8; }
+.hud-minimap:not(.is-expanded) { opacity: 0.68; }
 .hud-minimap.is-circle { border-radius: 50%; }
 .hud-minimap:not(.is-expanded):hover {
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(58, 208, 124, 0.35), 0 12px 30px rgba(0, 0, 0, 0.45);
