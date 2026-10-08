@@ -3,9 +3,10 @@ import { connect } from 'react-redux';
 import dayjs from 'dayjs';
 
 import { api } from '../../api/backend';
-import { Forward10, Fullscreen, FullscreenExit, Pause, PlayArrow, Replay10, VolumeOff, VolumeUp } from '../../icons';
+import { Forward10, Fullscreen, FullscreenExit, Pause, PlayArrow, Replay10, SettingsIcon, VolumeOff, VolumeUp } from '../../icons';
 import { currentOffset } from '../../timeline';
 import { onFrame } from '../../timeline/frameClock';
+import { toggleHudPanel } from '../GlassHud/store';
 import { pause, play, seek } from '../../timeline/playback';
 import { getSegmentNumber } from '../../utils';
 import { isIos } from '../../utils/browser.js';
@@ -468,6 +469,10 @@ const GlassControls = ({ dispatch, zoom, currentRoute, desiredPlaySpeed, isBuffe
             </>
           )}
 
+
+          <GlassButton onClick={toggleHudPanel} aria-label="HUD settings">
+            <SettingsIcon className="w-5 h-5" />
+          </GlassButton>
 
           <GlassButton
             onClick={onMuteToggle}

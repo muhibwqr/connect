@@ -8,6 +8,7 @@ import { api } from '../../api/backend';
 
 import { ErrorOutline } from '../../icons';
 import GlassControls, { CommaLoader } from '../GlassControls';
+import GlassHud from '../GlassHud';
 import { currentOffset } from '../../timeline';
 import { onFrame } from '../../timeline/frameClock';
 import store from '../../store';
@@ -283,6 +284,7 @@ export class DriveVideo extends Component {
           onError={this.onVideoError}
         />
         <GlassControls isMuted={isMuted} hasAudio={hasAudio} onMuteToggle={onMuteToggle} />
+        <GlassHud />
       </div>
     );
   }

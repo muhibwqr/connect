@@ -140,3 +140,11 @@
   aspect-ratio: auto;
   border-radius: 0;
 }
+
+/* lock-on button on the drive map */
+.map-lock { transition: background 0.25s ease, border-color 0.25s ease, transform 0.15s ease; }
+.map-lock:active { transform: scale(0.94); }
+.map-lock.is-locked {
+  background: linear-gradient(135deg, rgba(58, 208, 124, 0.6), rgba(58, 208, 124, 0.25));
+  border-color: rgba(58, 208, 124, 0.8);
+}
